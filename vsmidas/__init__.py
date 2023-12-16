@@ -126,7 +126,7 @@ def midas(
                 output.zero_()
 
             if not grayscale:
-                output = (output * 255).type(torch.uint8)
+                output = (output * 255).round().type(torch.uint8)
 
             return tensor_to_frame(output, grayscale, f[1].copy())
 
