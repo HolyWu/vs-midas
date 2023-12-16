@@ -7,7 +7,6 @@ import cv2
 import numpy as np
 import torch
 import vapoursynth as vs
-from functorch.compile import memory_efficient_fusion
 from torchvision.transforms.functional import normalize
 
 from .dpt_depth import DPTDepthModel
@@ -21,13 +20,7 @@ model_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "models")
 
 @torch.inference_mode()
 def midas(
-    clip: vs.VideoNode,
-    device_index: int | None = None,
-    num_streams: int = 1,
-    nvfuser: bool = False,
-    cuda_graphs: bool = False,
-    model: int = 2,
-    grayscale: bool = False,
+    clip: vs.VideoNode, device_index: int | None = None, num_streams: int = 1, model: int = 2, grayscale: bool = False
 ) -> vs.VideoNode:
     """Towards Robust Monocular Depth Estimation: Mixing Datasets for Zero-Shot Cross-Dataset Transfer
 
@@ -35,8 +28,6 @@ def midas(
                             RGBH performs inference in FP16 mode while RGBS performs inference in FP32 mode.
     :param device_index:    Device ordinal of the GPU.
     :param num_streams:     Number of CUDA streams to enqueue the kernels.
-    :param nvfuser:         Enable fusion through nvFuser. (experimental)
-    :param cuda_graphs:     Use CUDA Graphs to remove CPU overhead associated with launching CUDA kernels sequentially.
     :param model:           Model to use.
                             0 = dpt_swin2_tiny_256
                             1 = dpt_large_384
@@ -62,16 +53,12 @@ def midas(
     if model not in range(4):
         raise vs.Error("midas: model must be 0, 1, 2, or 3")
 
-    if model == 3 and cuda_graphs:
-        raise vs.Error("midas: dpt_beit_large_512 model is not compatible with cuda_graphs")
-
     if os.path.getsize(os.path.join(model_dir, "dpt_beit_large_512.pt")) == 0:
         raise vs.Error("midas: model files have not been downloaded. run 'python -m vsmidas' first")
 
     torch.set_float32_matmul_precision("high")
 
     fp16 = clip.format.bits_per_sample == 16
-    dtype = torch.half if fp16 else torch.float
 
     orig_w = clip.width
     orig_h = clip.height
@@ -110,30 +97,6 @@ def midas(
     if fp16:
         module.half()
 
-    if nvfuser:
-        module = memory_efficient_fusion(module)
-
-    if cuda_graphs:
-        graph: list[torch.cuda.CUDAGraph] = []
-        static_input: list[torch.Tensor] = []
-        static_output: list[torch.Tensor] = []
-
-        for i in range(num_streams):
-            static_input.append(
-                torch.zeros((1, 3, net_h, net_w), dtype=dtype, device=device).to(memory_format=torch.channels_last)
-            )
-
-            torch.cuda.synchronize(device=device)
-            stream[i].wait_stream(torch.cuda.current_stream(device=device))
-            with torch.cuda.stream(stream[i]):
-                module(static_input[i])
-            torch.cuda.current_stream(device=device).wait_stream(stream[i])
-            torch.cuda.synchronize(device=device)
-
-            graph.append(torch.cuda.CUDAGraph())
-            with torch.cuda.graph(graph[i], stream=stream[i]):
-                static_output.append(module(static_input[i]))
-
     if grayscale:
         new_format = clip.format.replace(color_family=vs.GRAY)
     else:
@@ -153,13 +116,7 @@ def midas(
             img = frame_to_tensor(f[0], device)
             normalize(img, [0.5, 0.5, 0.5], [0.5, 0.5, 0.5], inplace=True)
 
-            if cuda_graphs:
-                static_input[local_index].copy_(img)
-                graph[local_index].replay()
-                output = static_output[local_index]
-            else:
-                output = module(img)
-
+            output = module(img)
             output = output.unsqueeze(0)
 
             if not output.isfinite().all():
