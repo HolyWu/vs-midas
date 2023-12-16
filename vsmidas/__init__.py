@@ -58,11 +58,6 @@ def midas(
 
     torch.set_float32_matmul_precision("high")
 
-    fp16 = clip.format.bits_per_sample == 16
-
-    orig_w = clip.width
-    orig_h = clip.height
-
     device = torch.device("cuda", device_index)
 
     stream = [torch.cuda.Stream(device=device) for _ in range(num_streams)]
@@ -86,15 +81,13 @@ def midas(
             module = DPTDepthModel(backbone="beitl16_512")
             net_w, net_h = 512, 512
 
-    model_path = os.path.join(model_dir, model_name)
-
-    parameters = torch.load(model_path, map_location="cpu")
+    parameters = torch.load(os.path.join(model_dir, model_name), map_location="cpu")
     if "optimizer" in parameters:
         parameters = parameters["model"]
 
     module.load_state_dict(parameters)
     module.eval().to(device, memory_format=torch.channels_last)
-    if fp16:
+    if clip.format.bits_per_sample == 16:
         module.half()
 
     if grayscale:
@@ -114,15 +107,14 @@ def midas(
 
         with stream_lock[local_index], torch.cuda.stream(stream[local_index]):
             img = frame_to_tensor(f[0], device)
-            normalize(img, [0.5, 0.5, 0.5], [0.5, 0.5, 0.5], inplace=True)
+            normalize(img, mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True)
 
-            output = module(img)
-            output = output.unsqueeze(0)
+            output = module(img).unsqueeze(0)
 
             if not output.isfinite().all():
                 output.nan_to_num_(nan=0.0, posinf=0.0, neginf=0.0)
                 vs.core.log_message(
-                    vs.MESSAGE_TYPE_WARNING, "midas: non-finite values present, inference in FP32 mode is recommended"
+                    vs.MESSAGE_TYPE_WARNING, "midas: non-finite values present. inference in FP32 mode is recommended"
                 )
 
             output_min = output.min()
@@ -131,7 +123,7 @@ def midas(
             if output_max - output_min > torch.finfo(output.dtype).eps:
                 output = (output - output_min) / (output_max - output_min)
             else:
-                output.fill_(0.0)
+                output.zero_()
 
             if not grayscale:
                 output = (output * 255).type(torch.uint8)
@@ -142,7 +134,7 @@ def midas(
     new_clip = clip.std.BlankClip(net_w, net_h, format=new_format, keep=True)
     return new_clip.std.FrameEval(
         lambda n: new_clip.std.ModifyFrame([resized_clip, new_clip], inference), clip_src=[resized_clip, new_clip]
-    ).resize.Bicubic(orig_w, orig_h)
+    ).resize.Bicubic(clip.width, clip.height)
 
 
 def frame_to_tensor(frame: vs.VideoFrame, device: torch.device) -> torch.Tensor:
