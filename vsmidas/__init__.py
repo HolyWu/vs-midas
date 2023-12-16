@@ -11,7 +11,7 @@ from torchvision.transforms.functional import normalize
 
 from .dpt_depth import DPTDepthModel
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 os.environ["CUDA_MODULE_LOADING"] = "LAZY"
 

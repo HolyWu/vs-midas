@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "vsmidas"
-version = "1.0.0"
+version = "1.1.0"
 description = "MiDaS function for VapourSynth"
 readme = "README.md"
 requires-python = ">=3.11"
