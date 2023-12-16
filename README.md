@@ -3,10 +3,8 @@ Towards Robust Monocular Depth Estimation: Mixing Datasets for Zero-Shot Cross-D
 
 
 ## Dependencies
-- [NumPy](https://numpy.org/install)
-- [OpenCV-Python](https://github.com/opencv/opencv-python)
-- [PyTorch](https://pytorch.org/get-started) 1.13.1
-- [VapourSynth](http://www.vapoursynth.com/) R55+
+- [PyTorch](https://pytorch.org/get-started) 2.1.0 or later
+- [VapourSynth](http://www.vapoursynth.com/) R62 or later
 
 
 ## Installation
