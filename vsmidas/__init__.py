@@ -47,9 +47,6 @@ def midas(
     if num_streams < 1:
         raise vs.Error("midas: num_streams must be at least 1")
 
-    if num_streams > vs.core.num_threads:
-        raise vs.Error("midas: setting num_streams greater than `core.num_threads` is useless")
-
     if model not in range(4):
         raise vs.Error("midas: model must be 0, 1, 2, or 3")
 
