@@ -4,6 +4,7 @@ Towards Robust Monocular Depth Estimation: Mixing Datasets for Zero-Shot Cross-D
 
 ## Dependencies
 - [PyTorch](https://pytorch.org/get-started) 2.1.0 or later
+- [timm](https://pypi.org/project/timm/) 0.6.13. Not compatible with 0.9.x
 - [VapourSynth](http://www.vapoursynth.com/) R62 or later
 
 
